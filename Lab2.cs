@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Xml.Linq;
+using System.Threading.Tasks;
 
 class Node
 {
@@ -12,15 +13,28 @@ class Node
 
 class Program
 {
-    public static void FindMIS(Node v, Node parent = null)
+    public static async Task FindMIS(Node v, Node parent = null)
     {
         int include = 1;
         int exclude = 0;
 
+        var tasks = new List<Task>();
+
         foreach (var child in v.Neighbors)
         {
             if (child == parent) continue;
-            FindMIS(child, v);
+
+            tasks.Add(Task.Run(async () =>
+            {
+                await FindMIS(child, v);
+            }));
+        }
+
+        await Task.WhenAll(tasks);
+
+        foreach (var child in v.Neighbors)
+        {
+            if (child == parent) continue;
 
             include += child.Excluded;
             exclude += Math.Max(child.Included, child.Excluded);
@@ -30,29 +44,33 @@ class Program
         v.Excluded = exclude;
     }
 
-    public static void RecoverMIS(Node node, Node parent, bool takeNode, HashSet<Node> result)
+    public static async Task RecoverMIS(Node node, Node parent, bool takeNode, HashSet<Node> result)
     {
         if (takeNode) // add node, skip children
         {
             result.Add(node);
+            var tasks = new List<Task>();
             foreach (var child in node.Neighbors)
             {
                 if (child == parent) continue;
-                RecoverMIS(child, node, false, result);
+                tasks.Add(RecoverMIS(child, node, false, result));
             }
+            await Task.WhenAll(tasks);
         }
         else // skip node, check children
         {
+            var tasks = new List<Task>();
             foreach (var child in node.Neighbors)
             {
                 if (child == parent) continue;
                 bool takeChild = child.Included > child.Excluded;
-                RecoverMIS(child, node, takeChild, result);
+                tasks.Add(RecoverMIS(child, node, takeChild, result));
             }
+            await Task.WhenAll(tasks);
         }
     }
 
-    static void Main(string[] args)
+    static async Task Main(string[] args)
     {
         // Example 1:
         //             0
@@ -79,12 +97,12 @@ class Program
 
         // can use any node as root
         Node root = nodes[2];
-        FindMIS(root);
+        await FindMIS(root);
 
         // Restoring MIS
         HashSet<Node> misSet = new HashSet<Node>();
         bool takeRoot = root.Included > root.Excluded;
-        RecoverMIS(root, null, takeRoot, misSet);
+        await RecoverMIS(root, null, takeRoot, misSet);
 
         // getting Node indexes in MIS relative to List<Node>
         // (kinda overcomplicated but don't wanna use uid in Node class as it's not required)
@@ -117,11 +135,11 @@ class Program
 
         // can use any node as root
         root = nodes[4];
-        FindMIS(root);
+        await FindMIS(root);
 
         misSet = new HashSet<Node>();
         takeRoot = root.Included > root.Excluded;
-        RecoverMIS(root, null, takeRoot, misSet);
+        await RecoverMIS(root, null, takeRoot, misSet);
 
         indexes = misSet.Select(n => nodes.IndexOf(n)).OrderBy(i => i);
         
